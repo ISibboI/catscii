@@ -1,11 +1,17 @@
-use pretty_hex::PrettyHex;
 use reqwest::Client;
 use serde::Deserialize;
 
 #[tokio::main]
 async fn main() {
-    let image_bytes = get_cat_image_bytes(&Default::default()).await.unwrap();
-    println!("The image is {:?}", image_bytes[..200].hex_dump());
+    let art = get_cat_ascii_art().await.unwrap();
+    println!("{art}");
+}
+
+async fn get_cat_ascii_art() -> color_eyre::Result<String> {
+    let image_bytes = get_cat_image_bytes(&Default::default()).await?;
+    let image = image::load_from_memory(&image_bytes)?;
+    let ascii_art = artem::convert(image, artem::options::OptionBuilder::new().build());
+    Ok(ascii_art)
 }
 
 async fn get_cat_image_bytes(client: &Client) -> color_eyre::Result<Vec<u8>> {
