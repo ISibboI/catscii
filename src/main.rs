@@ -1,21 +1,58 @@
+use axum::body::BoxBody;
+use axum::http::{header, StatusCode};
+use axum::response::{IntoResponse, Response};
+use axum::routing::get;
+use axum::Router;
 use reqwest::Client;
 use serde::Deserialize;
 
 #[tokio::main]
-async fn main() {
-    let art = get_cat_ascii_art().await.unwrap();
-    println!("{art}");
+async fn main() -> anyhow::Result<()> {
+    let app = Router::new().route("/", get(root_get));
+
+    axum::Server::bind(&"0.0.0.0:8080".parse()?)
+        .serve(app.into_make_service())
+        .await?;
+
+    Ok(())
+}
+
+async fn root_get() -> Response<BoxBody> {
+    match get_cat_ascii_art().await {
+        Ok(art) => (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+            art,
+        )
+            .into_response(),
+        Err(error) => {
+            println!("Something went wrong: {error}");
+            (StatusCode::INTERNAL_SERVER_ERROR, "Something went wrong").into_response()
+        }
+    }
 }
 
 async fn get_cat_ascii_art() -> color_eyre::Result<String> {
     let image_bytes = get_cat_image_bytes(&Default::default()).await?;
     let image = image::load_from_memory(&image_bytes)?;
-    let ascii_art = artem::convert(image, artem::options::OptionBuilder::new().build());
+    let ascii_art = artem::convert(
+        image,
+        artem::options::OptionBuilder::new()
+            .target(artem::options::TargetType::HtmlFile(true, true))
+            .build(),
+    );
     Ok(ascii_art)
 }
 
 async fn get_cat_image_bytes(client: &Client) -> color_eyre::Result<Vec<u8>> {
-    Ok(client.get(get_cat_image_url(client).await?).send().await?.error_for_status()?.bytes().await?.to_vec())
+    Ok(client
+        .get(get_cat_image_url(client).await?)
+        .send()
+        .await?
+        .error_for_status()?
+        .bytes()
+        .await?
+        .to_vec())
 }
 
 async fn get_cat_image_url(client: &Client) -> color_eyre::Result<String> {
