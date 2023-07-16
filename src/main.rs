@@ -4,31 +4,57 @@ use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
+use opentelemetry::sdk::export::trace::stdout;
 use reqwest::Client;
 use serde::Deserialize;
 use std::str::FromStr;
-use tracing::{info, Level};
+use tracing::{error, info, Level, span, warn};
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::Registry;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let filter = Targets::from_str(std::env::var("RUST_LOG").as_deref().unwrap_or("info"))
+    // Install a new OpenTelemetry trace pipeline
+    let tracer = stdout::new_pipeline().install_simple();
+
+    // Create a tracing layer with the configured tracer
+    let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+
+    // Use the tracing subscriber `Registry`, or any other subscriber
+    // that impls `LookupSpan`
+    let subscriber = Registry::default().with(telemetry);
+
+    /*let filter = Targets::from_str(std::env::var("RUST_LOG").as_deref().unwrap_or("info"))
         .with_context(|| format!("RUST_LOG should be a valid tracing filter"))?;
     tracing_subscriber::fmt()
         .with_max_level(Level::TRACE)
         .json()
         .finish()
         .with(filter)
-        .init();
+        .init();*/
+
+    tracing::subscriber::with_default(subscriber, || {
+        // Spans will be sent to the configured OpenTelemetry exporter
+        let root = span!(tracing::Level::TRACE, "app_start", work_units = 2);
+        let _enter = root.enter();
+
+        error!("This event will be logged in the root span.");
+    });
 
     let app = Router::new().route("/", get(root_get));
+
+    let quit_signal = async {
+        _ = tokio::signal::ctrl_c().await;
+        warn!("Initiating graceful shutdown");
+    };
 
     let address = "0.0.0.0:8080".parse()?;
     info!("Listening on {address}");
     axum::Server::bind(&address)
         .serve(app.into_make_service())
+        .with_graceful_shutdown(quit_signal)
         .await?;
 
     Ok(())
@@ -43,7 +69,7 @@ async fn root_get() -> Response<BoxBody> {
         )
             .into_response(),
         Err(error) => {
-            println!("Something went wrong: {error}");
+            error!("Something went wrong: {error}");
             (StatusCode::INTERNAL_SERVER_ERROR, "Something went wrong").into_response()
         }
     }

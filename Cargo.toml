@@ -11,9 +11,11 @@ artem = { version = "1.1.5", default-features = false }
 axum = "0.6.16"
 color-eyre = "0.6.2"
 image = "0.24.5"
+opentelemetry = { version = "0.18.0", features = ["metrics", "rt-tokio"] }
 pretty-hex = "0.3.0"
 reqwest = { version = "0.11.14", features = ["json"] }
 serde = { version = "1.0.156", features = ["derive"] }
 tokio = { version = "1.26.0", features = ["full"] }
 tracing = "0.1.37"
+tracing-opentelemetry = { version = "0.18.0" }
 tracing-subscriber = { version = "0.3.17", features = ["json"] }
