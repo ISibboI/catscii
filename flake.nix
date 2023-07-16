@@ -30,21 +30,30 @@
           craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
           src = craneLib.cleanCargoSource ./.;
           nativeBuildInputs = with pkgs; [rustToolchain pkg-config];
-          buildInputs = with pkgs; [openssl];
+          buildInputs = with pkgs; [rustToolchain openssl];
           commonArgs = {
             inherit src buildInputs nativeBuildInputs;
           };
           cargoArtifacts = craneLib.buildDepsOnly commonArgs;
           bin = craneLib.buildPackage(commonArgs // {inherit cargoArtifacts;});
+          dockerImage = pkgs.dockerTools.streamLayeredImage {
+            name = "catscii";
+            tag = "latest";
+            contents = [bin pkgs.cacert];
+            config = {
+              Cmd = ["${bin}/bin/catscii"];
+            };
+          };
         in
         with pkgs;
         {
           packages = {
-            inherit bin;
+            inherit bin dockerImage;
             default = bin;
           };
           devShells.default = mkShell {
             inputsFrom = [bin];
+            buildInputs = with pkgs; [dive];
           };
         }
       );
